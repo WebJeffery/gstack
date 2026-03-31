@@ -85,6 +85,13 @@ fi
 _ROUTING_DECLINED=$(${ctx.paths.binDir}/gstack-config get routing_declined 2>/dev/null || echo "false")
 echo "HAS_ROUTING: $_HAS_ROUTING"
 echo "ROUTING_DECLINED: $_ROUTING_DECLINED"
+_HAS_PROJECT_SPEC="no"
+if [ -f PROJECT.md ] && grep -q "## Directory Structure" PROJECT.md 2>/dev/null; then
+  _HAS_PROJECT_SPEC="yes"
+fi
+_PROJECT_SPEC_DECLINED=$(${ctx.paths.binDir}/gstack-config get project_spec_declined 2>/dev/null || echo "false")
+echo "HAS_PROJECT_SPEC: $_HAS_PROJECT_SPEC"
+echo "PROJECT_SPEC_DECLINED: $_PROJECT_SPEC_DECLINED"
 \`\`\``;
 }
 
@@ -218,6 +225,28 @@ If B: run \`${ctx.paths.binDir}/gstack-config set routing_declined true\`
 Say "No problem. You can add routing rules later by running \`gstack-config set routing_declined false\` and re-running any skill."
 
 This only happens once per project. If \`HAS_ROUTING\` is \`yes\` or \`ROUTING_DECLINED\` is \`true\`, skip this entirely.`;
+}
+
+function generateProjectSpecInjection(ctx: TemplateContext): string {
+  return `If \`HAS_PROJECT_SPEC\` is \`no\` AND \`PROJECT_SPEC_DECLINED\` is \`false\` AND \`PROACTIVE_PROMPTED\` is \`yes\` AND \`HAS_ROUTING\` is \`yes\`:
+Check if PROJECT.md exists. If it does not, offer to set up project conventions.
+
+Use AskUserQuestion:
+
+> gstack can set up project conventions so AI creates files in the right places.
+> This scans your project structure and generates PROJECT.md with directory rules,
+> naming conventions, and file templates. Run once per project — takes ~2 minutes.
+
+Options:
+- A) Set up project conventions (recommended)
+- B) No thanks, I'll manage file locations manually
+
+If A: read the setup-project skill at \`${ctx.paths.skillRoot}/setup-project/SKILL.md\` and follow its instructions (invoke via Skill tool or execute the workflow directly).
+
+If B: run \`${ctx.paths.binDir}/gstack-config set project_spec_declined true\`
+Say "No problem. You can set up conventions later by running \`/setup-project\`."
+
+This only happens once per project. If \`HAS_PROJECT_SPEC\` is \`yes\` or \`PROJECT_SPEC_DECLINED\` is \`true\`, skip this entirely.`;
 }
 
 function generateAskUserFormat(_ctx: TemplateContext): string {
@@ -579,6 +608,7 @@ export function generatePreamble(ctx: TemplateContext): string {
     generateTelemetryPrompt(ctx),
     generateProactivePrompt(ctx),
     generateRoutingInjection(ctx),
+    generateProjectSpecInjection(ctx),
     generateVoiceDirective(tier),
     ...(tier >= 2 ? [generateAskUserFormat(ctx), generateCompletenessSection()] : []),
     ...(tier >= 3 ? [generateRepoModeSection(), generateSearchBeforeBuildingSection(ctx)] : []),

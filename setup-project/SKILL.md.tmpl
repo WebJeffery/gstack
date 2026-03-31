@@ -1,0 +1,386 @@
+---
+name: setup-project
+preamble-tier: 2
+version: 1.0.0
+description: |
+  Configure project conventions for AI code generation. Detects directory structure,
+  naming patterns, code style, and file templates — then persists to PROJECT.md
+  with CLAUDE.md reference. Run once per project. Use when: "setup project",
+  "configure conventions", "create project spec", or when AI creates files in
+  wrong locations.
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - AskUserQuestion
+---
+
+{{PREAMBLE}}
+
+# /setup-project — Configure Project Conventions
+
+You are helping the user set up project conventions so AI creates files in the
+right places. Your job is to detect directory structure, naming patterns, code
+style, and file templates — then persist everything to PROJECT.md and CLAUDE.md.
+
+After this runs once, all gstack skills read these files and follow the conventions.
+
+## User-invocable
+When the user types `/setup-project`, run this skill.
+
+## Instructions
+
+### Step 1: Check existing configuration
+
+```bash
+[ -f PROJECT.md ] && echo "PROJECT_MD_EXISTS" && head -20 PROJECT.md || echo "NO_PROJECT_MD"
+[ -f CLAUDE.md ] && grep -q "## Project Structure" CLAUDE.md && echo "CLAUDE_MD_HAS_REF" || echo "NO_CLAUDE_REF"
+```
+
+If PROJECT.md already exists, show the first 20 lines and ask:
+
+- **Context:** PROJECT.md already exists in this project.
+- **RECOMMENDATION:** Choose C if the conventions look correct. Choose A to re-detect and update.
+- A) Re-detect from scratch (overwrite existing)
+- B) Edit specific sections (show current, let me change one thing)
+- C) Done — conventions look correct
+
+If the user picks C, stop. If B, ask which section to edit, then skip to Step 4.
+
+### Step 2: Detect project type and framework
+
+First, determine what kind of project this is:
+
+```bash
+# Framework detection
+[ -f package.json ] && cat package.json | head -30
+[ -f tsconfig.json ] && cat tsconfig.json
+[ -f next.config.js ] || [ -f next.config.mjs ] && echo "FRAMEWORK:nextjs"
+[ -f vite.config.ts ] || [ -f vite.config.js ] && echo "FRAMEWORK:vite"
+[ -f nuxt.config.ts ] && echo "FRAMEWORK:nuxt"
+[ -f vue.config.js ] && echo "FRAMEWORK:vue"
+[ -f angular.json ] && echo "FRAMEWORK:angular"
+[ -f svelte.config.js ] && echo "FRAMEWORK:svelte"
+[ -f Cargo.toml ] && echo "LANGUAGE:rust"
+[ -f go.mod ] && echo "LANGUAGE:go"
+[ -f pyproject.toml ] || [ -f setup.py ] && echo "LANGUAGE:python"
+[ -f Gemfile ] && echo "LANGUAGE:ruby"
+
+# ESLint/Prettier config
+[ -f .eslintrc.js ] || [ -f .eslintrc.json ] || [ -f eslint.config.js ] && echo "HAS_ESLINT"
+[ -f .prettierrc ] || [ -f .prettierrc.json ] || [ -f prettier.config.js ] && echo "HAS_PRETTIER"
+
+# Test framework
+[ -f jest.config.js ] || [ -f jest.config.ts ] && echo "TEST:jest"
+[ -f vitest.config.ts ] || [ -f vitest.config.js ] && echo "TEST:vitest"
+[ -f playwright.config.ts ] && echo "TEST:playwright"
+[ -f cypress.config.ts ] && echo "TEST:cypress"
+```
+
+Based on detected framework, note:
+- **Language:** TypeScript, JavaScript, Python, Go, Rust, Ruby
+- **Framework:** React, Next.js, Vue, Nuxt, Angular, Svelte, Node.js, etc.
+- **Test framework:** Jest, Vitest, Playwright, Cypress, etc.
+
+### Step 3: Detect directory structure
+
+Scan the project to find existing directories and their purposes:
+
+```bash
+# Find top-level directories
+find . -maxdepth 2 -type d ! -path './.*' ! -path './node_modules*' ! -path './dist*' ! -path './build*' 2>/dev/null | sort
+
+# Count files per directory to infer purpose
+for dir in src lib app api components pages hooks utils types tests test __tests__ spec; do
+  if [ -d "$dir" ] || [ -d "src/$dir" ]; then
+    actual_dir="$dir"
+    [ -d "src/$dir" ] && actual_dir="src/$dir"
+    count=$(find "$actual_dir" -type f ! -name '*.test.*' ! -name '*.spec.*' 2>/dev/null | wc -l | tr -d ' ')
+    test_count=$(find "$actual_dir" -type f -name '*.test.*' -o -name '*.spec.*' 2>/dev/null | wc -l | tr -d ' ')
+    echo "DIR:$actual_dir FILES:$count TESTS:$test_count"
+  fi
+done
+```
+
+Analyze the output:
+- Directories with many `.tsx` files → component directories
+- Directories with route-like names (`pages/`, `app/`, `routes/`) → page/route directories
+- Directories with `.ts` files only (no `.tsx`) → utility/lib directories
+- Directories with API-like names (`api/`, `routes/api/`) → API handlers
+
+### Step 4: Detect naming conventions
+
+Analyze file naming patterns in key directories:
+
+```bash
+# Sample file names from components (if exists)
+if [ -d src/components ]; then
+  find src/components -maxdepth 2 -type f -name '*.tsx' -o -name '*.ts' 2>/dev/null | head -20
+elif [ -d components ]; then
+  find components -maxdepth 2 -type f -name '*.tsx' -o -name '*.ts' 2>/dev/null | head -20
+fi
+
+# Sample file names from lib/utils
+if [ -d src/lib ]; then
+  find src/lib -maxdepth 2 -type f -name '*.ts' 2>/dev/null | head -10
+elif [ -d lib ]; then
+  find lib -maxdepth 2 -type f -name '*.ts' 2>/dev/null | head -10
+fi
+
+# Sample file names from pages/routes
+if [ -d src/pages ]; then
+  find src/pages -maxdepth 2 -type f 2>/dev/null | head -10
+elif [ -d pages ]; then
+  find pages -maxdepth 2 -type f 2>/dev/null | head -10
+elif [ -d app ]; then
+  find app -maxdepth 3 -type f -name '*.tsx' -o -name '*.ts' 2>/dev/null | head -15
+fi
+
+# Test file naming pattern
+find . -type f \( -name '*.test.ts' -o -name '*.test.tsx' -o -name '*.spec.ts' -o -name '*.spec.tsx' \) 2>/dev/null | head -10
+```
+
+Determine naming patterns:
+- **PascalCase:** Files like `Button.tsx`, `UserProfile.tsx` → components
+- **camelCase:** Files like `formatDate.ts`, `apiClient.ts` → utilities
+- **kebab-case:** Files like `user-profile.tsx`, `api-route.ts` → pages, routes
+- **Test suffix:** `.test.ts` or `.spec.ts` → test files
+
+### Step 5: Detect code style from config files
+
+If ESLint/Prettier/tsconfig exist, read them:
+
+```bash
+# ESLint config (show relevant rules)
+if [ -f .eslintrc.json ]; then
+  cat .eslintrc.json | grep -E 'quotes|semi|indent' || cat .eslintrc.json
+elif [ -f eslint.config.js ]; then
+  cat eslint.config.js | head -50
+fi
+
+# Prettier config
+[ -f .prettierrc ] && cat .prettierrc
+[ -f .prettierrc.json ] && cat .prettierrc.json
+
+# TypeScript config (show compiler options)
+[ -f tsconfig.json ] && cat tsconfig.json | grep -A 20 '"compilerOptions"'
+```
+
+Extract key style settings:
+- **Indent:** 2 or 4 spaces (from Prettier `tabWidth` or ESLint `indent`)
+- **Quotes:** single or double (from ESLint `quotes` rule)
+- **Semicolons:** required or none (from Prettier `semi` or ESLint `semi`)
+- **Strict:** TypeScript strict mode enabled?
+
+### Step 6: Analyze file templates
+
+Look at existing files to infer what's typically included:
+
+```bash
+# Check component file structure (if component directory exists)
+comp_dir=""
+[ -d src/components ] && comp_dir="src/components"
+[ -d components ] && comp_dir="components"
+if [ -n "$comp_dir" ]; then
+  # Find a component subdirectory (indicating component = folder pattern)
+  find "$comp_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -5
+  # Or find standalone component files
+  find "$comp_dir" -maxdepth 1 -type f -name '*.tsx' 2>/dev/null | head -5
+fi
+
+# Check if components have associated files (test, style, index)
+if [ -n "$comp_dir" ]; then
+  # Sample one component to see what files accompany it
+  sample=$(find "$comp_dir" -type f -name '*.tsx' 2>/dev/null | head -1)
+  if [ -n "$sample" ]; then
+    basename=$(basename "$sample" .tsx)
+    dirname=$(dirname "$sample")
+    echo "SAMPLE_COMPONENT: $sample"
+    ls -la "$dirname" 2>/dev/null | grep -E "$basename|index"
+  fi
+fi
+```
+
+Determine typical file structure:
+- **Standalone files:** Component = single `.tsx` file
+- **Directory pattern:** Component = folder with `index.ts`, `[Name].tsx`, `[Name].test.tsx`, `[Name].css`
+- **Test co-location:** Tests in same directory or separate `test/` directory
+
+### Step 7: Ask user to confirm detected conventions
+
+Present the detected conventions and ask for confirmation. Use AskUserQuestion for each category:
+
+**First question - Directory structure:**
+
+> Based on your project, I detected this directory structure:
+>
+> - `src/components/` → React/UI components (XX files)
+> - `src/pages/` → Page-level components (XX files)
+> - `src/lib/` → Utility functions (XX files)
+> - ...
+>
+> **New files should be placed:**
+> - Components → `src/components/[ComponentName]/`
+> - Pages → `src/pages/[page-name].tsx`
+> - Utilities → `src/lib/[utility-name].ts`
+>
+> RECOMMENDATION: Choose A if this matches your intent. Completeness: 9/10.
+> A) Looks correct — use these rules
+> B) I want to change some directories
+> C) Let me describe the structure manually
+
+**Second question - Naming conventions:**
+
+> Detected naming patterns:
+>
+> | Type | Convention | Examples |
+> |------|------------|----------|
+> | Components | PascalCase | `Button.tsx`, `UserProfile.tsx` |
+> | Utilities | camelCase | `formatDate.ts`, `apiClient.ts` |
+> | Pages | kebab-case | `user-profile.tsx`, `settings.tsx` |
+> | Tests | `.test.ts[x]` suffix | `Button.test.tsx` |
+>
+> RECOMMENDATION: Choose A if these match your existing code. Completeness: 9/10.
+> A) Use these conventions
+> B) Change some conventions
+> C) I have different preferences — describe them
+
+**Third question - Code style:**
+
+> Detected from config files:
+>
+> - Language: TypeScript
+> - Indent: 2 spaces
+> - Quotes: single
+> - Semicolons: none
+> - Strict mode: enabled
+>
+> RECOMMENDATION: Choose A — these are already enforced by your ESLint/Prettier. Completeness: 10/10.
+> A) Use detected style (matches existing config)
+> B) Add additional style rules
+> C) No style rules needed — skip this section
+
+**Fourth question - File templates:**
+
+> For new React components, detected pattern:
+>
+> ```
+> src/components/[ComponentName]/
+> ├── index.ts              # Export barrel
+> ├── [ComponentName].tsx   # Component
+> ├── [ComponentName].test.tsx  # Tests
+> ├── [ComponentName].css   # Styles
+> ```
+>
+> RECOMMENDATION: Choose A if you want AI to create this structure for new components. Completeness: 9/10.
+> A) Use this template
+> B) Change the template
+> C) No template — just create the file
+
+**Fifth question - PROJECT.md location:**
+
+> PROJECT.md will contain the full conventions. Should it be:
+>
+> RECOMMENDATION: Choose A — commit it so team and AI share the same rules. Completeness: 10/10.
+> A) Commit to repo (team reference)
+> B) Gitignore (personal reference only)
+
+### Step 8: Write PROJECT.md
+
+Based on confirmed conventions, write PROJECT.md:
+
+```markdown
+# Project Structure & Conventions
+
+> Generated by /setup-project on {date}. Edit directly or re-run to update.
+
+## Directory Structure
+
+{detected directory structure}
+
+**New files placement rules:**
+- {file type} → {target directory}
+
+## Naming Conventions
+
+{confirmed naming table}
+
+## Code Style
+
+{confirmed style settings}
+
+## File Templates
+
+{confirmed templates}
+
+## Do's and Don'ts
+
+### Do:
+- {positive rules}
+
+### Don't:
+- {negative rules}
+```
+
+Use the Write tool to create PROJECT.md.
+
+### Step 9: Update CLAUDE.md
+
+Read CLAUDE.md (or create it). Add or replace the `## Project Structure & Conventions` section:
+
+```markdown
+## Project Structure & Conventions
+
+> See PROJECT.md for full conventions. **AI must read PROJECT.md before creating new files.**
+
+**Quick reference:**
+- Components → `src/components/[ComponentName]/` (PascalCase directory + files)
+- Utilities → `src/lib/[utility-name].ts` (camelCase)
+- Pages → `src/pages/[page-name].tsx` (kebab-case)
+- Tests → `[name].test.ts[x]` (co-located with source)
+
+**Before creating any new file:**
+1. Read PROJECT.md to determine correct location
+2. Follow naming convention for that file type
+3. Include required template files (test, index, etc.)
+```
+
+Use Edit tool to update CLAUDE.md (find and replace existing section, or append).
+
+If user chose to gitignore PROJECT.md in Step 7, add to .gitignore:
+
+```bash
+grep -q "^PROJECT.md$" .gitignore 2>/dev/null || echo "PROJECT.md" >> .gitignore
+```
+
+### Step 10: Summary
+
+```
+PROJECT CONVENTIONS — CONFIGURED
+════════════════════════════════
+PROJECT.md:    {created/updated}
+CLAUDE.md:     {section added/updated}
+Gitignore:     {added if user chose B}
+
+Directory structure: {X rules}
+Naming conventions:  {X types}
+Code style:          {X settings}
+File templates:      {X templates}
+
+Next steps:
+- Run any gstack skill — it will read PROJECT.md automatically
+- Edit PROJECT.md directly to refine conventions
+- Run /setup-project again to re-detect and update
+```
+
+## Important Rules
+
+- **Detect first, confirm second.** Always show what was detected before writing.
+- **Use existing patterns.** Prefer detected conventions over generic defaults.
+- **Framework-aware.** Adapt detection logic to Next.js app router vs pages router, Vue vs React, etc.
+- **CLAUDE.md is mandatory.** Always add the reference section so AI reads PROJECT.md.
+- **Idempotent.** Running /setup-project multiple times updates cleanly.
+- **AskUserQuestion format.** Follow the preamble AskUserQuestion format for all questions.

@@ -1,0 +1,554 @@
+---
+name: spec
+preamble-tier: 3
+version: 1.0.0
+description: |
+  Generate technical specification from requirements. Takes user description,
+  screenshots, or existing code — produces a structured spec for AI implementation.
+  Use when: "write a spec", "create specification", "I need to describe a feature",
+  "help me clarify requirements", or before asking AI to implement something complex.
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Grep
+  - Glob
+  - AskUserQuestion
+  - WebSearch
+---
+
+{{PREAMBLE}}
+
+# /spec — Technical Specification Generator
+
+You are a **technical product manager**. Your job is to transform vague requirements into clear, implementable specifications. This skill produces specs, not code.
+
+**HARD GATE:** Do NOT write any implementation code. Your only output is a structured specification document.
+
+---
+
+## Overview
+
+This skill helps you create structured technical specifications that AI can follow to implement features correctly. It works with:
+
+- **Text descriptions** — User describes what they want in natural language
+- **Images/Screenshots** — UI mockups, wireframes, flow diagrams
+- **Existing code** — Reference implementations to understand patterns
+- **Interactive Q&A** — Clarify requirements through conversation
+
+**Output:** Structured markdown spec saved to `.gstack/specs/{feature-name}-spec-{date}.md`
+
+---
+
+## Phase 1: Input Collection
+
+### Step 1.1: Check what was provided
+
+First, determine what the user has already provided:
+
+1. **Direct text description** — Look in the conversation for requirements text
+2. **Image paths** — Check if user mentioned image files or screenshot paths
+3. **Code files** — Check if user referenced existing code to learn from
+4. **Nothing yet** — Need to collect via questions
+
+```bash
+# Setup spec directory
+mkdir -p .gstack/specs
+
+# Check for existing specs
+ls -la .gstack/specs/ 2>/dev/null || echo "No existing specs"
+```
+
+### Step 1.2: Read images if provided
+
+If the user provided image paths or screenshots, read them to understand visual requirements:
+
+Use the Read tool on any image paths mentioned. Extract:
+- UI layout and components
+- User flow indicators
+- Annotations or callouts
+- State changes or transitions
+
+### Step 1.3: Read existing code if provided
+
+If the user referenced existing code for patterns:
+
+```bash
+# Find relevant files
+{{SLUG_EVAL}}
+```
+
+Use Glob/Grep to find related code. Read key files to understand:
+- Naming patterns
+- File structure
+- API conventions
+- Data models
+
+---
+
+## Phase 2: Project Context
+
+Understand the project this spec will be implemented in.
+
+### Step 2.1: Read project configuration
+
+```bash
+# Project configuration
+[ -f CLAUDE.md ] && head -100 CLAUDE.md || echo "No CLAUDE.md"
+[ -f PROJECT.md ] && cat PROJECT.md || echo "No PROJECT.md"
+
+# Tech stack
+[ -f package.json ] && cat package.json | head -50 || echo "No package.json"
+[ -f tsconfig.json ] && cat tsconfig.json || echo "No tsconfig.json"
+
+# Framework detection
+[ -f next.config.js ] || [ -f next.config.mjs ] && echo "FRAMEWORK: Next.js"
+[ -f vite.config.ts ] && echo "FRAMEWORK: Vite"
+[ -f nuxt.config.ts ] && echo "FRAMEWORK: Nuxt"
+```
+
+### Step 2.2: Understand existing architecture
+
+```bash
+# Directory structure
+find . -type d -maxdepth 3 ! -path './node_modules*' ! -path './.git*' ! -path './dist*' 2>/dev/null | head -30
+
+# Key file patterns
+find . -type f \( -name "*.ts" -o -name "*.tsx" \) ! -path './node_modules*' ! -path './dist*' 2>/dev/null | head -30
+```
+
+Note the project's:
+- Directory conventions (components in `src/components/`, etc.)
+- Naming patterns (PascalCase components, camelCase utilities)
+- Test location and patterns
+- API structure
+
+---
+
+## Phase 3: Interactive Clarification
+
+Now clarify the requirements through structured questions. Ask these in order.
+
+### Question 1: Problem Statement
+
+Use AskUserQuestion:
+
+> Let me make sure I understand the problem:
+>
+> [Restate what you understand from the user's input]
+>
+> **Is this correct? What's missing or wrong?**
+
+Let the user confirm or correct. If input was minimal, ask:
+
+> Help me understand what you want to build:
+>
+> A) I'll describe it in my own words
+> B) I have a UI mockup/screenshot to share
+> C) I want something similar to [existing feature]
+> D) Let me share my screen/walk you through it
+
+### Question 2: Target Users
+
+Use AskUserQuestion:
+
+> Who will use this feature?
+>
+> A) End users (customers)
+> B) Internal users (team members)
+> C) API consumers (other systems)
+> D) Administrators
+>
+> **Describe the primary user persona.**
+
+### Question 3: Core Functionality
+
+Use AskUserQuestion:
+
+> Based on your description, I understand the core functions are:
+>
+> 1. [Function 1]
+> 2. [Function 2]
+> 3. [Function 3]
+>
+> **What's missing? What's the priority order?**
+
+Options:
+- A) This looks right — continue
+- B) I need to add more functions
+- C) I need to change the priorities
+- D) Let me explain differently
+
+### Question 4: Constraints & Requirements
+
+Use AskUserQuestion:
+
+> Any constraints I should know about?
+>
+> **Select all that apply:**
+> - Performance requirements (response time < X ms)
+> - Security requirements (auth, encryption, audit)
+> - Compatibility requirements (browsers, devices, APIs)
+> - Timeline constraints (need by date X)
+> - Budget constraints
+> - Integration requirements (must work with X)
+
+### Question 5: Success Criteria
+
+Use AskUserQuestion:
+
+> How will you know this is done right?
+>
+> **What are the acceptance criteria?**
+>
+> Example format:
+> - Given [context], when [action], then [result]
+> - User can [do X] within [Y seconds]
+> - System handles [Z concurrent users]
+
+Let user provide specific, testable criteria.
+
+---
+
+## Phase 4: Generate Specification
+
+Now generate the structured specification document.
+
+### Step 4.1: Feature naming
+
+Determine a short, descriptive name for the feature:
+- Use kebab-case: `user-authentication`, `shopping-cart`, `api-rate-limiting`
+- Should be instantly recognizable
+- Avoid generic names like "new-feature"
+
+### Step 4.2: Write the spec
+
+Create the specification with this structure:
+
+```markdown
+# [Feature Name] Technical Specification
+
+> Generated by /spec on YYYY-MM-DD
+> Status: Draft
+> Project: [project name]
+
+---
+
+## 1. Overview
+
+### 1.1 Background
+
+[Why this feature is needed. What problem it solves. User pain points.]
+
+### 1.2 Goals
+
+- [Primary goal]
+- [Secondary goal]
+- [Success metric, if known]
+
+### 1.3 Scope
+
+**In-scope:**
+- [What this feature includes]
+
+**Out-of-scope:**
+- [What this feature explicitly excludes]
+
+---
+
+## 2. User Stories
+
+Format: As a [role], I want [behavior], so that [benefit]
+
+| ID | User Story | Priority |
+|----|------------|----------|
+| US-1 | As a [role], I want [behavior], so that [benefit] | P0 |
+| US-2 | ... | P1 |
+
+---
+
+## 3. Functional Requirements
+
+### 3.1 Core Features
+
+| ID | Feature | Description | Priority |
+|----|---------|-------------|----------|
+| F-1 | [Feature name] | [Detailed description] | P0 |
+| F-2 | ... | ... | P1 |
+
+### 3.2 User Interface
+
+[Describe the UI. Include ASCII wireframes if helpful.]
+
+```
+┌─────────────────────────────────┐
+│         [Component]             │
+│  ┌─────────┐  ┌─────────┐      │
+│  │ Button  │  │ Input   │      │
+│  └─────────┘  └─────────┘      │
+└─────────────────────────────────┘
+```
+
+**States:**
+- Default: [description]
+- Loading: [description]
+- Error: [description]
+- Success: [description]
+
+**Interactions:**
+- Click on [X] → [result]
+- Hover on [Y] → [result]
+
+### 3.3 API Design (if applicable)
+
+**Endpoint: [METHOD] /api/[path]**
+
+Request:
+```json
+{
+  "field": "type",
+  "description": "purpose"
+}
+```
+
+Response:
+```json
+{
+  "field": "type"
+}
+```
+
+Error cases:
+- 400: [condition]
+- 401: [condition]
+- 500: [condition]
+
+---
+
+## 4. Technical Design
+
+### 4.1 Architecture
+
+[ASCII diagram of system architecture]
+
+```
+┌──────────┐     ┌──────────┐     ┌──────────┐
+│  Client  │────▶│  Server  │────▶│ Database │
+└──────────┘     └──────────┘     └──────────┘
+```
+
+**Data Flow:**
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
+
+### 4.2 Data Model
+
+**Entities:**
+
+[Entity Name]
+- id: string (UUID)
+- field: type
+- created_at: timestamp
+- updated_at: timestamp
+
+**Relationships:**
+- [Entity A] has many [Entity B]
+- [Entity C] belongs to [Entity D]
+
+**State Machine (if applicable):**
+
+```
+[State A] ──event──▶ [State B] ──event──▶ [State C]
+    ▲                                        │
+    └────────────── event ───────────────────┘
+```
+
+### 4.3 Implementation Notes
+
+**Key Files to Create/Modify:**
+- `src/[path]/[file]` - [purpose]
+- `src/[path]/[file]` - [purpose]
+
+**Algorithms/Logic:**
+- [Describe any non-trivial logic]
+
+**Edge Cases:**
+- [Edge case 1]: [handling]
+- [Edge case 2]: [handling]
+
+---
+
+## 5. Non-Functional Requirements
+
+### 5.1 Performance
+- Response time: < [X]ms for [operation]
+- Throughput: [X] requests/second
+- Lazy loading for [components]
+
+### 5.2 Security
+- [Authentication requirements]
+- [Authorization requirements]
+- [Data protection requirements]
+
+### 5.3 Reliability
+- Error handling: [approach]
+- Retry logic: [approach]
+- Graceful degradation: [approach]
+
+### 5.4 Observability
+- Logging: [what to log]
+- Metrics: [what to track]
+- Alerts: [when to alert]
+
+---
+
+## 6. Test Plan
+
+### 6.1 Test Scenarios
+
+| ID | Scenario | Steps | Expected Result |
+|----|----------|-------|-----------------|
+| T-1 | [Happy path] | 1. Do X 2. Do Y | [Result] |
+| T-2 | [Error case] | 1. Invalid input | Error shown |
+| T-3 | [Edge case] | 1. Boundary condition | [Result] |
+
+### 6.2 Test Coverage Requirements
+
+- Unit tests: [components/functions]
+- Integration tests: [API endpoints]
+- E2E tests: [user flows]
+
+---
+
+## 7. Implementation Checklist
+
+**Phase 1: Foundation**
+- [ ] Create data models/migrations
+- [ ] Setup API routes
+- [ ] Implement core logic
+
+**Phase 2: UI**
+- [ ] Create UI components
+- [ ] Add state management
+- [ ] Handle loading/error states
+
+**Phase 3: Testing**
+- [ ] Write unit tests
+- [ ] Write integration tests
+- [ ] Manual QA
+
+**Phase 4: Polish**
+- [ ] Error handling
+- [ ] Loading states
+- [ ] Accessibility check
+
+---
+
+## 8. Appendix
+
+### Related Documents
+- [Links to related specs, PRDs, designs]
+
+### References
+- [External documentation, API references]
+
+### Change History
+| Date | Author | Changes |
+|------|--------|---------|
+| YYYY-MM-DD | /spec | Initial draft |
+
+---
+
+## Questions for Review
+
+Before implementation, clarify:
+1. [Any remaining ambiguity]
+2. [Any design decisions that need stakeholder input]
+3. [Any technical risks to discuss]
+```
+
+### Step 4.3: Save the spec
+
+```bash
+# Generate filename
+FEATURE_NAME="[feature-name]"  # from Step 4.1
+DATE=$(date +%Y-%m-%d)
+SPEC_FILE=".gstack/specs/${FEATURE_NAME}-spec-${DATE}.md"
+
+# Check for existing spec with same name
+if [ -f "$SPEC_FILE" ]; then
+  echo "SPEC_EXISTS: $SPEC_FILE"
+fi
+```
+
+If spec exists for same feature on same date, ask user:
+
+> A spec already exists for this feature today: `$SPEC_FILE`
+>
+> A) Overwrite it
+> B) Create new version with timestamp
+> C) Cancel — I'll edit the existing one
+
+Use the Write tool to save the specification.
+
+---
+
+## Phase 5: Review and Refine
+
+### Step 5.1: User confirmation
+
+Show the generated spec and ask:
+
+> I've generated the specification. Please review:
+>
+> [Show key sections: Goals, User Stories, Core Features]
+>
+> **What would you like to change?**
+>
+> A) Looks good — save it
+> B) I want to edit specific sections
+> C) Start over with different requirements
+> D) Add more detail to [specific area]
+
+If B, ask which sections need changes and iterate.
+
+### Step 5.2: Final summary
+
+After the spec is saved:
+
+```
+SPECIFICATION CREATED
+═══════════════════════════════════════════════
+File:     .gstack/specs/{feature-name}-spec-{date}.md
+Sections: Overview, User Stories, Requirements,
+          Technical Design, Tests, Checklist
+
+NEXT STEPS
+═══════════════════════════════════════════════
+1. Review the spec for accuracy
+2. Run /plan-eng-review for architecture review
+3. Start implementation with: "Implement the spec at [path]"
+4. Track progress with the Implementation Checklist
+```
+
+---
+
+## Important Rules
+
+1. **Never implement.** This skill produces specs only. No code generation.
+2. **Be specific.** Vague specs lead to wrong implementations. Push for details.
+3. **Ask about edge cases.** What happens when [wrong input]? What if [network fails]?
+4. **Include test scenarios.** Every feature needs test coverage.
+5. **Respect project conventions.** Read PROJECT.md and match existing patterns.
+6. **Iterate.** First draft is rarely perfect. Offer to refine.
+7. **Use ASCII diagrams.** They're readable in markdown and help clarify flow.
+
+---
+
+## Integration with Other Skills
+
+- **Before /spec:** Run `/setup-project` to ensure project conventions exist
+- **After /spec:** Run `/plan-eng-review` to validate the technical design
+- **Implementation:** Reference the spec file path when asking AI to implement
+- **Updates:** Re-run `/spec` when requirements change, or edit the spec directly
